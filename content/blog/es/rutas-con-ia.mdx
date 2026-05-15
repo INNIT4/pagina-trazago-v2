@@ -1,0 +1,37 @@
+---
+title: "Cómo construimos las rutas con IA"
+excerpt: "Gemini propone, nosotros validamos. Una mirada honesta a cómo se arma un itinerario en TrazaGo, paso por paso, sin marketing."
+date: "2026-04-22"
+author: "Equipo TrazaGo"
+readTime: 6
+category: "Producto"
+hue: "from-ink-700 to-ink-900"
+---
+
+Cuando dices "quiero algo cultural, tranquilo, de media mañana", la app no llama a Gemini de inmediato. Hay seis pasos invisibles antes de que veas tu itinerario.
+
+## 1. Pre-filtro
+
+Tomamos tu ubicación, hora actual y preferencias. Filtramos el catálogo a los lugares que cumplen: están abiertos, son de tu categoría, están a una distancia razonable.
+
+## 2. Prompt builder
+
+Construimos un prompt estructurado con los candidatos resultantes. Incluye coordenadas, horarios, rating, duración estimada de visita y restricciones.
+
+## 3. Gemini
+
+Llamamos a Gemini con respuesta forzada a JSON. Un esquema valida la salida: si Gemini se desvía, reintentamos con el mismo prompt una vez más, luego degradamos a una ruta heurística.
+
+## 4. Optimización
+
+La salida de Gemini se reordena: TSP aproximado por distancia, ajustado a ventanas de horario y nivel de energía declarado.
+
+## 5. Enriquecimiento
+
+Agregamos fotos del Storage, tips locales y metadata final. Todo cacheado para que la app no haga trips innecesarios.
+
+## 6. Resultado
+
+La pantalla `RouteResultActivity` muestra cuatro tabs: mapa, itinerario lineal, editor drag-drop y opciones de regenerar/compartir.
+
+> El usuario no ve nada de esto. Solo ve un itinerario que se siente improvisado por un amigo local. Esa es la idea.

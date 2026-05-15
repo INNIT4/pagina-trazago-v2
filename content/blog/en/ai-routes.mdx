@@ -1,0 +1,37 @@
+---
+title: "How we build routes with AI"
+excerpt: "Gemini proposes, we validate. An honest look at how an itinerary is assembled in TrazaGo, step by step, no marketing."
+date: "2026-04-22"
+author: "TrazaGo Team"
+readTime: 6
+category: "Product"
+hue: "from-ink-700 to-ink-900"
+---
+
+When you say "I want something cultural, calm, mid-morning," the app does not call Gemini right away. Six invisible steps run first.
+
+## 1. Pre-filter
+
+We take your location, current time and preferences. We filter the catalog to the places that match: open right now, in your category, within a reasonable distance.
+
+## 2. Prompt builder
+
+We build a structured prompt with the resulting candidates. It includes coordinates, hours, rating, estimated visit duration and constraints.
+
+## 3. Gemini
+
+We call Gemini with response forced to JSON. A schema validates the output: if Gemini drifts, we retry once with the same prompt, then degrade to a heuristic route.
+
+## 4. Optimization
+
+Gemini's output is reordered: approximate TSP by distance, adjusted to opening hours and declared energy level.
+
+## 5. Enrichment
+
+We add Storage photos, local tips and final metadata. Everything cached so the app does not make unnecessary trips.
+
+## 6. Result
+
+The `RouteResultActivity` screen shows four tabs: map, linear itinerary, drag-drop editor, and regenerate/share options.
+
+> The user sees none of this. Just an itinerary that feels improvised by a local friend. That's the point.
