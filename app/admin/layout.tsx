@@ -62,18 +62,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.push("/admin/login");
-        return; // mantener checking=true hasta que navegue
+        return;
       }
 
-      const token = await user.getIdTokenResult(true);
-      if (!token.claims.admin) {
-        await signOut(auth);
+      try {
+        const token = await user.getIdTokenResult(true);
+        if (!token.claims.admin) {
+          await signOut(auth);
+          router.push("/admin/login");
+          return;
+        }
+        setUserEmail(user.email ?? "");
+        setChecking(false);
+      } catch {
+        // Si falla la verificación del token, dejar en checking hasta que el usuario reintente
         router.push("/admin/login");
-        return; // mantener checking=true hasta que navegue
       }
-
-      setUserEmail(user.email ?? "");
-      setChecking(false);
     });
 
     return () => unsub();
