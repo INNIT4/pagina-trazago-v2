@@ -61,17 +61,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        if (pathname !== "/admin/login") router.push("/admin/login");
-        setChecking(false);
-        return;
+        router.push("/admin/login");
+        return; // mantener checking=true hasta que navegue
       }
 
       const token = await user.getIdTokenResult(true);
       if (!token.claims.admin) {
         await signOut(auth);
         router.push("/admin/login");
-        setChecking(false);
-        return;
+        return; // mantener checking=true hasta que navegue
       }
 
       setUserEmail(user.email ?? "");
