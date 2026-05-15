@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import { isLocale, getDictionary, locales, type Locale } from "@/lib/i18n";
-import { getAllPosts, getPost } from "@/lib/blog";
+import { getAllPosts, getPost, getPostFS } from "@/lib/blog";
+
+export const revalidate = 60;
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
   return locales.flatMap((loc) =>
@@ -116,7 +119,7 @@ export default async function PostPage({
   const { locale, slug } = await params;
   if (!isLocale(locale)) notFound();
   const dict = getDictionary(locale as Locale);
-  const post = getPost(locale as Locale, slug);
+  const post = (await getPostFS(locale as Locale, slug)) ?? getPost(locale as Locale, slug);
   if (!post) notFound();
 
   return (
