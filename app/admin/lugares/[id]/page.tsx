@@ -7,7 +7,9 @@ import { doc, getDoc, setDoc, addDoc, collection } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 interface FormData {
-  nombre: string; descripcionCorta: string; descripcion: string; descripcionLarga: string;
+  nombre: string;
+  descripcionCorta: string; descripcion: string; descripcionLarga: string;
+  descripcionCortaEn: string; descripcionEn: string; descripcionLargaEn: string;
   categoria: string; subcategorias: string; barrio: string; direccion: string;
   telefono: string; sitioWeb: string; imagenUrl: string;
   horarios: string; cerradoTemporalmente: boolean;
@@ -25,7 +27,9 @@ interface FormData {
 }
 
 const empty: FormData = {
-  nombre: "", descripcionCorta: "", descripcion: "", descripcionLarga: "",
+  nombre: "",
+  descripcionCorta: "", descripcion: "", descripcionLarga: "",
+  descripcionCortaEn: "", descripcionEn: "", descripcionLargaEn: "",
   categoria: "General", subcategorias: "", barrio: "", direccion: "",
   telefono: "", sitioWeb: "", imagenUrl: "",
   horarios: "", cerradoTemporalmente: false,
@@ -80,6 +84,8 @@ export default function LugarEditorPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("general");
+  const [aiFilling, setAiFilling] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
 
   useEffect(() => {
     if (isNew) return;
@@ -89,6 +95,7 @@ export default function LugarEditorPage() {
         setForm({
           nombre: d.nombre ?? "", descripcionCorta: d.descripcionCorta ?? "",
           descripcion: d.descripcion ?? "", descripcionLarga: d.descripcionLarga ?? "",
+          descripcionCortaEn: d.descripcionCortaEn ?? "", descripcionEn: d.descripcionEn ?? "", descripcionLargaEn: d.descripcionLargaEn ?? "",
           categoria: d.categoria ?? "General", subcategorias: (d.subcategorias ?? []).join(", "),
           barrio: d.barrio ?? "", direccion: d.direccion ?? "",
           telefono: d.telefono ?? "", sitioWeb: d.sitioWeb ?? "", imagenUrl: d.imagenUrl ?? "",
@@ -123,6 +130,46 @@ export default function LugarEditorPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  async function handleAiFill() {
+    if (!form.nombre.trim()) {
+      setError("Escribe el nombre del lugar antes de usar la IA.");
+      return;
+    }
+    setAiFilling(true);
+    setAiMessage("");
+    setError("");
+    try {
+      const res = await fetch("/api/admin/ai-fill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: form.nombre, categoria: form.categoria }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Error de IA"); return; }
+
+      setForm((prev) => ({
+        ...prev,
+        descripcionCorta: data.descripcionCorta ?? prev.descripcionCorta,
+        descripcion: data.descripcion ?? prev.descripcion,
+        descripcionLarga: data.descripcionLarga ?? prev.descripcionLarga,
+        descripcionCortaEn: data.descripcionCortaEn ?? prev.descripcionCortaEn,
+        descripcionEn: data.descripcionEn ?? prev.descripcionEn,
+        descripcionLargaEn: data.descripcionLargaEn ?? prev.descripcionLargaEn,
+        historiaResumen: data.historiaResumen ?? prev.historiaResumen,
+        tipsVisita: Array.isArray(data.tipsVisita) ? data.tipsVisita.join("\n") : prev.tipsVisita,
+        tags: Array.isArray(data.tags) ? data.tags.join(", ") : prev.tags,
+        mejorMomentoDelDia: Array.isArray(data.mejorMomentoDelDia) ? data.mejorMomentoDelDia : prev.mejorMomentoDelDia,
+        mejorTemporada: Array.isArray(data.mejorTemporada) ? data.mejorTemporada : prev.mejorTemporada,
+        audienciaIdeal: Array.isArray(data.audienciaIdeal) ? data.audienciaIdeal : prev.audienciaIdeal,
+      }));
+      setAiMessage("✓ Campos rellenados. Revisa y ajusta lo que sea necesario.");
+    } catch {
+      setError("No se pudo conectar con la IA.");
+    } finally {
+      setAiFilling(false);
+    }
+  }
+
   async function handleSave() {
     if (!form.nombre.trim()) { setError("El nombre es obligatorio."); return; }
     setSaving(true); setError("");
@@ -132,6 +179,7 @@ export default function LugarEditorPage() {
     const data = {
       nombre: form.nombre, slug, descripcionCorta: form.descripcionCorta,
       descripcion: form.descripcion, descripcionLarga: form.descripcionLarga,
+      descripcionCortaEn: form.descripcionCortaEn, descripcionEn: form.descripcionEn, descripcionLargaEn: form.descripcionLargaEn,
       categoria: form.categoria, subcategorias: form.subcategorias.split(",").map((s) => s.trim()).filter(Boolean),
       barrio: form.barrio, direccion: form.direccion, telefono: form.telefono,
       sitioWeb: form.sitioWeb, imagenUrl: form.imagenUrl, horarios: form.horarios,
@@ -190,7 +238,27 @@ export default function LugarEditorPage() {
         <div className="admin-form-section">
           <div className="admin-form-section-title">Información general</div>
           <div className="admin-form">
-            <div className="admin-field"><label>Nombre *</label><input value={form.nombre} onChange={(e) => set("nombre", e.target.value)} /></div>
+            <div className="admin-field">
+              <label>Nombre *</label>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <input style={{ flex: 1 }} value={form.nombre} onChange={(e) => set("nombre", e.target.value)} />
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-primary"
+                  onClick={handleAiFill}
+                  disabled={aiFilling || !form.nombre.trim()}
+                  title="Genera descripciones, historia, tips y tags automáticamente con IA"
+                  style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                >
+                  {aiFilling ? "Generando…" : "✨ Rellenar con IA"}
+                </button>
+              </div>
+              {aiMessage && (
+                <div style={{ marginTop: 8, padding: "8px 12px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, fontSize: 13, color: "#166534" }}>
+                  {aiMessage}
+                </div>
+              )}
+            </div>
             <div className="admin-form-row">
               <div className="admin-field"><label>Categoría</label>
                 <select value={form.categoria} onChange={(e) => set("categoria", e.target.value)}>
@@ -199,9 +267,20 @@ export default function LugarEditorPage() {
               </div>
               <div className="admin-field"><label>Subcategorías (comas)</label><input value={form.subcategorias} onChange={(e) => set("subcategorias", e.target.value)} /></div>
             </div>
-            <div className="admin-field"><label>Descripción corta (≤140 chars)</label><input value={form.descripcionCorta} onChange={(e) => set("descripcionCorta", e.target.value)} maxLength={140} /></div>
-            <div className="admin-field"><label>Descripción</label><textarea value={form.descripcion} onChange={(e) => set("descripcion", e.target.value)} /></div>
-            <div className="admin-field"><label>Descripción larga</label><textarea value={form.descripcionLarga} onChange={(e) => set("descripcionLarga", e.target.value)} style={{ minHeight: 160 }} /></div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: "var(--fg-2)", marginBottom: 10, paddingBottom: 6, borderBottom: "2px solid var(--primary)", display: "inline-block" }}>🇲🇽 Español</div>
+                <div className="admin-field"><label>Descripción corta (≤140)</label><input value={form.descripcionCorta} onChange={(e) => set("descripcionCorta", e.target.value)} maxLength={140} /></div>
+                <div className="admin-field"><label>Descripción</label><textarea value={form.descripcion} onChange={(e) => set("descripcion", e.target.value)} /></div>
+                <div className="admin-field"><label>Descripción larga</label><textarea value={form.descripcionLarga} onChange={(e) => set("descripcionLarga", e.target.value)} style={{ minHeight: 160 }} /></div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: "var(--fg-2)", marginBottom: 10, paddingBottom: 6, borderBottom: "2px solid #3b82f6", display: "inline-block" }}>🇺🇸 English</div>
+                <div className="admin-field"><label>Short description (≤140)</label><input value={form.descripcionCortaEn} onChange={(e) => set("descripcionCortaEn", e.target.value)} maxLength={140} /></div>
+                <div className="admin-field"><label>Description</label><textarea value={form.descripcionEn} onChange={(e) => set("descripcionEn", e.target.value)} /></div>
+                <div className="admin-field"><label>Long description</label><textarea value={form.descripcionLargaEn} onChange={(e) => set("descripcionLargaEn", e.target.value)} style={{ minHeight: 160 }} /></div>
+              </div>
+            </div>
             <div className="admin-form-row">
               <div className="admin-field"><label>Barrio / Zona</label><input value={form.barrio} onChange={(e) => set("barrio", e.target.value)} /></div>
               <div className="admin-field"><label>Dirección</label><input value={form.direccion} onChange={(e) => set("direccion", e.target.value)} /></div>
