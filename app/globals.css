@@ -445,5 +445,69 @@ html[lang="en"] [data-en] { display: revert; }
 .admin-login-logo span { font-size: 20px; font-weight: 800; color: var(--navy); }
 .admin-error { background: #fdecea; color: #c62828; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
 
+.admin-mobile-header { display: none; }
+.admin-overlay { display: none; }
+
 @media (max-width: 1024px) { .admin-stat-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 768px) { .admin-sidebar { width: 200px; } .admin-content { padding: 20px; } }
+
+@media (max-width: 768px) {
+  .admin-shell { flex-direction: column; }
+
+  /* Sidebar: oculto por defecto, aparece como drawer */
+  .admin-sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: 260px; z-index: 200;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    min-height: 100vh;
+  }
+  .admin-sidebar.open { transform: translateX(0); }
+
+  /* Overlay oscuro detrás del drawer */
+  .admin-overlay {
+    display: block;
+    position: fixed; inset: 0; z-index: 199;
+    background: rgba(0,0,0,.4);
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s ease;
+  }
+  .admin-overlay.open { opacity: 1; pointer-events: auto; }
+
+  /* Barra superior móvil */
+  .admin-mobile-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
+    background: var(--navy); color: #fff;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .admin-mobile-header span { font-size: 16px; font-weight: 700; }
+  .admin-hamburger {
+    background: none; border: none; cursor: pointer;
+    color: #fff; padding: 4px; line-height: 1;
+    font-size: 22px;
+  }
+
+  .admin-content { padding: 16px; }
+
+  /* Tabs: scroll horizontal en lugar de cortar */
+  .admin-tabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; border-radius: 8px; }
+  .admin-tab { white-space: nowrap; padding: 8px 12px; font-size: 12px; }
+
+  /* Filas de 2 columnas → 1 columna */
+  .admin-form-row { grid-template-columns: 1fr; }
+  .admin-form { max-width: 100%; }
+
+  /* Topbar: apila en móvil */
+  .admin-topbar { flex-wrap: wrap; gap: 10px; }
+  .admin-title { font-size: 18px; }
+
+  /* Stats: 1 columna */
+  .admin-stat-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Búsqueda: ancho completo */
+  .admin-search input { width: 100%; }
+  .admin-search { flex-wrap: wrap; }
+
+  /* Tablas: scroll horizontal */
+  .admin-table-wrap { overflow-x: auto; }
+}

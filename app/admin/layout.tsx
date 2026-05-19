@@ -57,6 +57,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [checking, setChecking] = useState(true);
   const [userEmail, setUserEmail] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -99,7 +100,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="admin-shell">
-      <aside className="admin-sidebar">
+      {/* Overlay móvil */}
+      <div className={`admin-overlay ${sidebarOpen ? "open" : ""}`} onClick={() => setSidebarOpen(false)} />
+
+      {/* Barra superior móvil */}
+      <header className="admin-mobile-header">
+        <button className="admin-hamburger" onClick={() => setSidebarOpen(true)} aria-label="Abrir menú">☰</button>
+        <span>TrazaGo Admin</span>
+      </header>
+
+      <aside className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="admin-sidebar-brand">
           <span>TrazaGo</span>
           <small>Panel de administración</small>
@@ -118,6 +128,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     key={item.href}
                     href={item.href}
                     className={isActive ? "active" : ""}
+                    onClick={() => setSidebarOpen(false)}
                   >
                     <span className="nav-icon">{item.icon}</span>
                     {item.label}
