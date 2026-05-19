@@ -15,7 +15,11 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1500,
+            responseMimeType: "application/json",
+          },
         }),
       }
     );
@@ -79,14 +83,19 @@ Valores permitidos para audienciaIdeal: SOLO, PAREJA, FAMILIA, AMIGOS, NIÑOS, M
       return NextResponse.json({ error: "Gemini no devolvió respuesta. Verifica que la API key tenga acceso a la Gemini API." }, { status: 500 });
     }
 
-    // Extraer el JSON aunque Gemini agregue backticks o texto extra
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) {
-      console.error("Gemini raw response (no JSON found):", text.slice(0, 300));
-      return NextResponse.json({ error: "La IA no devolvió JSON válido. Intenta de nuevo." }, { status: 500 });
+    // Con responseMimeType: "application/json" el texto ya es JSON puro.
+    // Fallback: extraer con regex por si acaso.
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) {
+        console.error("Gemini raw response:", text.slice(0, 400));
+        return NextResponse.json({ error: "La IA no devolvió JSON válido. Intenta de nuevo." }, { status: 500 });
+      }
+      data = JSON.parse(match[0]);
     }
-
-    const data = JSON.parse(match[0]);
     return NextResponse.json(data);
   } catch (err) {
     console.error("AI fill error:", err);
