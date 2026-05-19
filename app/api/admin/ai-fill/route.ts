@@ -1,5 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const MODELS = [
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+];
+
+async function callGemini(apiKey: string, prompt: string): Promise<string> {
+  for (const model of MODELS) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
+        }),
+      }
+    );
+
+    const json = await res.json();
+
+    // Si Gemini devolvió un error, intentar con el siguiente modelo
+    if (json.error) {
+      console.warn(`Model ${model} error:`, json.error.message);
+      continue;
+    }
+
+    const text: string = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    if (text) return text;
+  }
+  return "";
+}
+
 export async function POST(req: NextRequest) {
   const { nombre, categoria } = await req.json();
 
@@ -9,7 +43,7 @@ export async function POST(req: NextRequest) {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "GEMINI_API_KEY no configurada" }, { status: 500 });
+    return NextResponse.json({ error: "GEMINI_API_KEY no configurada en Vercel" }, { status: 500 });
   }
 
   const prompt = `Eres un experto en turismo cultural de Álamos, Sonora, México (Pueblo Mágico).
@@ -18,7 +52,7 @@ Genera contenido para el siguiente punto de interés turístico:
 Nombre: ${nombre}
 Categoría: ${categoria || "General"}
 
-Devuelve ÚNICAMENTE un JSON válido con esta estructura (sin markdown, sin explicaciones):
+Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta (sin markdown, sin bloques de código, sin texto antes ni después):
 {
   "descripcionCorta": "máximo 140 caracteres, atractiva para turistas",
   "descripcion": "2-3 oraciones descriptivas en español",
@@ -34,36 +68,28 @@ Devuelve ÚNICAMENTE un JSON válido con esta estructura (sin markdown, sin expl
   "audienciaIdeal": ["FAMILIA", "PAREJA"]
 }
 
-Para mejorMomentoDelDia usa solo valores de: AMANECER, MAÑANA, MEDIODIA, TARDE, ATARDECER, NOCHE
-Para mejorTemporada usa solo valores de: Primavera, Verano, Otoño, Invierno, Todo el año
-Para audienciaIdeal usa solo valores de: SOLO, PAREJA, FAMILIA, AMIGOS, NIÑOS, MAYORES`;
+Valores permitidos para mejorMomentoDelDia: AMANECER, MAÑANA, MEDIODIA, TARDE, ATARDECER, NOCHE
+Valores permitidos para mejorTemporada: Primavera, Verano, Otoño, Invierno, Todo el año
+Valores permitidos para audienciaIdeal: SOLO, PAREJA, FAMILIA, AMIGOS, NIÑOS, MAYORES`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
-        }),
-      }
-    );
+    const text = await callGemini(apiKey, prompt);
 
-    const json = await res.json();
-    const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    if (!text) {
+      return NextResponse.json({ error: "Gemini no devolvió respuesta. Verifica que la API key tenga acceso a la Gemini API." }, { status: 500 });
+    }
 
-    // Extraer JSON aunque Gemini agregue backticks
+    // Extraer el JSON aunque Gemini agregue backticks o texto extra
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) {
-      return NextResponse.json({ error: "Respuesta inesperada de Gemini" }, { status: 500 });
+      console.error("Gemini raw response (no JSON found):", text.slice(0, 300));
+      return NextResponse.json({ error: "La IA no devolvió JSON válido. Intenta de nuevo." }, { status: 500 });
     }
 
     const data = JSON.parse(match[0]);
     return NextResponse.json(data);
   } catch (err) {
     console.error("AI fill error:", err);
-    return NextResponse.json({ error: "Error al contactar Gemini" }, { status: 500 });
+    return NextResponse.json({ error: "Error al procesar la respuesta de Gemini." }, { status: 500 });
   }
 }
