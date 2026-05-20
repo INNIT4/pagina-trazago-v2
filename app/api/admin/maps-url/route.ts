@@ -35,7 +35,10 @@ function parseMapsUrl(url: string) {
 
 async function resolveShortUrl(url: string): Promise<string> {
   try {
-    const res = await fetch(url, { redirect: "follow", method: "HEAD" });
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; bot)" },
+    });
     return res.url !== url ? res.url : url;
   } catch {
     return url;
