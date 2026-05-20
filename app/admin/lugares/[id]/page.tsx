@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { doc, getDoc, setDoc, addDoc, collection } from "firebase/firestore";
+import { doc, getDoc, setDoc, addDoc, collection, GeoPoint } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import MapPicker from "@/components/admin/MapPicker";
+
+interface LatLng { lat: number; lng: number }
 
 interface FormData {
   nombre: string;
@@ -12,6 +15,11 @@ interface FormData {
   descripcionCortaEn: string; descripcionEn: string; descripcionLargaEn: string;
   categoria: string; subcategorias: string; barrio: string; direccion: string;
   telefono: string; sitioWeb: string; imagenUrl: string;
+  imagenesGaleria: string[];
+  ubicacion: LatLng | null;
+  googlePlaceId: string;
+  rating: number;
+  reviewCount: number;
   horarios: string; cerradoTemporalmente: boolean;
   precioNivel: string; precioPromedioMxn: string; entradaGratuita: boolean;
   duracionMinSugeridaMin: string; duracionMaxSugeridaMin: string;
@@ -32,6 +40,11 @@ const empty: FormData = {
   descripcionCortaEn: "", descripcionEn: "", descripcionLargaEn: "",
   categoria: "General", subcategorias: "", barrio: "", direccion: "",
   telefono: "", sitioWeb: "", imagenUrl: "",
+  imagenesGaleria: [],
+  ubicacion: null,
+  googlePlaceId: "",
+  rating: 0,
+  reviewCount: 0,
   horarios: "", cerradoTemporalmente: false,
   precioNivel: "0", precioPromedioMxn: "0", entradaGratuita: true,
   duracionMinSugeridaMin: "30", duracionMaxSugeridaMin: "90",
@@ -86,12 +99,26 @@ export default function LugarEditorPage() {
   const [activeTab, setActiveTab] = useState("general");
   const [aiFilling, setAiFilling] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
+  const [placesSuggestions, setPlacesSuggestions] = useState<Array<{ placeId: string; mainText: string; secondaryText: string }>>([]);
+  const [placesLoading, setPlacesLoading] = useState(false);
+  const [placesMessage, setPlacesMessage] = useState("");
+  const [editorialSummary, setEditorialSummary] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (isNew) return;
     getDoc(doc(db, "lugares", id)).then((snap) => {
       if (snap.exists()) {
         const d = snap.data();
+        // Convertir GeoPoint → {lat, lng}
+        const ubicacion: LatLng | null = d.ubicacion
+          ? typeof d.ubicacion.latitude === "number"
+            ? { lat: d.ubicacion.latitude, lng: d.ubicacion.longitude }
+            : (d.ubicacion.lat != null && d.ubicacion.lng != null)
+              ? { lat: d.ubicacion.lat, lng: d.ubicacion.lng }
+              : null
+          : null;
         setForm({
           nombre: d.nombre ?? "", descripcionCorta: d.descripcionCorta ?? "",
           descripcion: d.descripcion ?? "", descripcionLarga: d.descripcionLarga ?? "",
@@ -99,6 +126,11 @@ export default function LugarEditorPage() {
           categoria: d.categoria ?? "General", subcategorias: (d.subcategorias ?? []).join(", "),
           barrio: d.barrio ?? "", direccion: d.direccion ?? "",
           telefono: d.telefono ?? "", sitioWeb: d.sitioWeb ?? "", imagenUrl: d.imagenUrl ?? "",
+          imagenesGaleria: Array.isArray(d.imagenesGaleria) ? d.imagenesGaleria : [],
+          ubicacion,
+          googlePlaceId: d.googlePlaceId ?? "",
+          rating: typeof d.rating === "number" ? d.rating : 0,
+          reviewCount: typeof d.reviewCount === "number" ? d.reviewCount : 0,
           horarios: d.horarios ?? "", cerradoTemporalmente: d.cerradoTemporalmente ?? false,
           precioNivel: String(d.precioNivel ?? 0), precioPromedioMxn: String(d.precioPromedioMxn ?? 0),
           entradaGratuita: d.entradaGratuita ?? true,
@@ -130,6 +162,77 @@ export default function LugarEditorPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  function handleNombreChange(value: string) {
+    set("nombre", value);
+    setPlacesMessage("");
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (value.trim().length < 3) {
+      setPlacesSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setPlacesLoading(true);
+      try {
+        const res = await fetch("/api/admin/places-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: value }),
+        });
+        const data = await res.json();
+        if (Array.isArray(data.predictions)) {
+          setPlacesSuggestions(data.predictions);
+          setShowSuggestions(true);
+        }
+      } catch {
+        // Silencioso — si Places falla, el usuario puede llenar a mano
+      } finally {
+        setPlacesLoading(false);
+      }
+    }, 350);
+  }
+
+  async function handleSelectPlace(placeId: string) {
+    setShowSuggestions(false);
+    setPlacesLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/places-details", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ placeId }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setError(d.error ?? "Error al cargar detalles"); return; }
+
+      setEditorialSummary(d._editorialSummary ?? "");
+
+      setForm((prev) => ({
+        ...prev,
+        nombre: d.nombre || prev.nombre,
+        direccion: d.direccion || prev.direccion,
+        telefono: d.telefono || prev.telefono,
+        sitioWeb: d.sitioWeb || prev.sitioWeb,
+        horarios: d.horarios || prev.horarios,
+        rating: typeof d.rating === "number" ? d.rating : prev.rating,
+        reviewCount: typeof d.reviewCount === "number" ? d.reviewCount : prev.reviewCount,
+        googlePlaceId: d.googlePlaceId || prev.googlePlaceId,
+        ubicacion: d.ubicacion ?? prev.ubicacion,
+        imagenUrl: d.imagenUrl || prev.imagenUrl,
+        imagenesGaleria: Array.isArray(d.imagenesGaleria) && d.imagenesGaleria.length > 0
+          ? d.imagenesGaleria
+          : prev.imagenesGaleria,
+      }));
+      setPlacesMessage("✓ Datos importados de Google Places. Ahora completa categorización y dale a ✨ Rellenar con IA para descripciones.");
+    } catch {
+      setError("No se pudo conectar con Google Places.");
+    } finally {
+      setPlacesLoading(false);
+    }
+  }
+
   async function handleAiFill() {
     if (!form.nombre.trim()) {
       setError("Escribe el nombre del lugar antes de usar la IA.");
@@ -142,7 +245,13 @@ export default function LugarEditorPage() {
       const res = await fetch("/api/admin/ai-fill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: form.nombre, categoria: form.categoria }),
+        body: JSON.stringify({
+          nombre: form.nombre,
+          categoria: form.categoria,
+          direccion: form.direccion,
+          horariosTexto: form.horarios,
+          editorialSummary,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Error de IA"); return; }
@@ -182,7 +291,12 @@ export default function LugarEditorPage() {
       descripcionCortaEn: form.descripcionCortaEn, descripcionEn: form.descripcionEn, descripcionLargaEn: form.descripcionLargaEn,
       categoria: form.categoria, subcategorias: form.subcategorias.split(",").map((s) => s.trim()).filter(Boolean),
       barrio: form.barrio, direccion: form.direccion, telefono: form.telefono,
-      sitioWeb: form.sitioWeb, imagenUrl: form.imagenUrl, horarios: form.horarios,
+      sitioWeb: form.sitioWeb, imagenUrl: form.imagenUrl,
+      imagenesGaleria: form.imagenesGaleria,
+      ubicacion: form.ubicacion ? new GeoPoint(form.ubicacion.lat, form.ubicacion.lng) : null,
+      googlePlaceId: form.googlePlaceId || null,
+      rating: form.rating, reviewCount: form.reviewCount,
+      horarios: form.horarios,
       cerradoTemporalmente: form.cerradoTemporalmente,
       precioNivel: parseInt(form.precioNivel) || 0,
       precioPromedioMxn: parseInt(form.precioPromedioMxn) || 0,
@@ -203,7 +317,7 @@ export default function LugarEditorPage() {
     };
 
     try {
-      if (isNew) await addDoc(collection(db, "lugares"), { ...data, rating: 0, reviewCount: 0, visitCount: 0 });
+      if (isNew) await addDoc(collection(db, "lugares"), { ...data, visitCount: 0 });
       else await setDoc(doc(db, "lugares", id), data, { merge: true });
       router.push("/admin/lugares");
     } catch (err) { setError("Error al guardar."); console.error(err); }
@@ -238,10 +352,42 @@ export default function LugarEditorPage() {
         <div className="admin-form-section">
           <div className="admin-form-section-title">Información general</div>
           <div className="admin-form">
-            <div className="admin-field">
-              <label>Nombre *</label>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <input style={{ flex: 1 }} value={form.nombre} onChange={(e) => set("nombre", e.target.value)} />
+            <div className="admin-field" style={{ position: "relative" }}>
+              <label>Nombre * <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: "var(--fg-3)" }}>— escribe para buscar en Google Places</span></label>
+              <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 240px", position: "relative", minWidth: 200 }}>
+                  <input
+                    style={{ width: "100%" }}
+                    value={form.nombre}
+                    onChange={(e) => handleNombreChange(e.target.value)}
+                    onFocus={() => placesSuggestions.length > 0 && setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    placeholder="Ej: Catedral de La Purísima Concepción"
+                    autoComplete="off"
+                  />
+                  {placesLoading && (
+                    <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "var(--fg-3)" }}>
+                      Buscando…
+                    </span>
+                  )}
+                  {showSuggestions && placesSuggestions.length > 0 && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "#fff", border: "1px solid #dde1e7", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,.08)", zIndex: 50, maxHeight: 300, overflowY: "auto" }}>
+                      {placesSuggestions.map((s) => (
+                        <button
+                          key={s.placeId}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); handleSelectPlace(s.placeId); }}
+                          style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 14px", border: "none", borderBottom: "1px solid #f0f2f5", background: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "#f8f9fa")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                        >
+                          <div style={{ fontWeight: 600, color: "var(--navy)" }}>{s.mainText}</div>
+                          {s.secondaryText && <div style={{ fontSize: 12, color: "var(--fg-3)", marginTop: 2 }}>{s.secondaryText}</div>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
                   className="admin-btn admin-btn-primary"
@@ -253,6 +399,11 @@ export default function LugarEditorPage() {
                   {aiFilling ? "Generando…" : "✨ Rellenar con IA"}
                 </button>
               </div>
+              {placesMessage && (
+                <div style={{ marginTop: 8, padding: "8px 12px", background: "#eff6ff", border: "1px solid #93c5fd", borderRadius: 8, fontSize: 13, color: "#1e40af" }}>
+                  {placesMessage}
+                </div>
+              )}
               {aiMessage && (
                 <div style={{ marginTop: 8, padding: "8px 12px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, fontSize: 13, color: "#166534" }}>
                   {aiMessage}
@@ -289,8 +440,37 @@ export default function LugarEditorPage() {
               <div className="admin-field"><label>Teléfono</label><input value={form.telefono} onChange={(e) => set("telefono", e.target.value)} /></div>
               <div className="admin-field"><label>Sitio web</label><input value={form.sitioWeb} onChange={(e) => set("sitioWeb", e.target.value)} /></div>
             </div>
+
+            <div className="admin-field">
+              <label>Ubicación en el mapa</label>
+              <MapPicker value={form.ubicacion} onChange={(v) => set("ubicacion", v)} />
+            </div>
+
             <div className="admin-field"><label>URL imagen principal</label><input value={form.imagenUrl} onChange={(e) => set("imagenUrl", e.target.value)} /></div>
-            {form.imagenUrl && <img src={form.imagenUrl} alt="" style={{ width: 200, height: 120, objectFit: "cover", borderRadius: 8 }} onError={(e) => (e.currentTarget.style.display = "none")} />}
+            {form.imagenUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={form.imagenUrl} alt="" style={{ width: 200, height: 120, objectFit: "cover", borderRadius: 8 }} onError={(e) => (e.currentTarget.style.display = "none")} />
+            )}
+
+            {form.imagenesGaleria.length > 0 && (
+              <div className="admin-field">
+                <label>Galería ({form.imagenesGaleria.length})</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 }}>
+                  {form.imagenesGaleria.map((url, idx) => (
+                    <div key={`${url}-${idx}`} style={{ position: "relative", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: "1px solid #dde1e7", background: "#f0f2f5" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => (e.currentTarget.style.display = "none")} />
+                      <button
+                        type="button"
+                        onClick={() => set("imagenesGaleria", form.imagenesGaleria.filter((_, i) => i !== idx))}
+                        style={{ position: "absolute", top: 4, right: 4, width: 24, height: 24, borderRadius: "50%", border: "none", background: "rgba(0,0,0,.7)", color: "#fff", cursor: "pointer", fontSize: 12, lineHeight: 1 }}
+                        aria-label="Eliminar foto"
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

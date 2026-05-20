@@ -39,7 +39,7 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const { nombre, categoria } = await req.json();
+  const { nombre, categoria, direccion, horariosTexto, editorialSummary } = await req.json();
 
   if (!nombre?.trim()) {
     return NextResponse.json({ error: "Nombre requerido" }, { status: 400 });
@@ -50,12 +50,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "GEMINI_API_KEY no configurada en Vercel" }, { status: 500 });
   }
 
+  const contextoExtra: string[] = [];
+  if (direccion?.trim()) contextoExtra.push(`Dirección real: ${direccion}`);
+  if (horariosTexto?.trim()) contextoExtra.push(`Horarios reales:\n${horariosTexto}`);
+  if (editorialSummary?.trim()) contextoExtra.push(`Resumen de Google: ${editorialSummary}`);
+  const contextoBloque = contextoExtra.length
+    ? `\nContexto verificado de Google Places (úsalo para precisión):\n${contextoExtra.join("\n")}\n`
+    : "";
+
   const prompt = `Eres un experto en turismo cultural de Álamos, Sonora, México (Pueblo Mágico).
 Genera contenido para el siguiente punto de interés turístico:
 
 Nombre: ${nombre}
 Categoría: ${categoria || "General"}
-
+${contextoBloque}
 Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta (sin markdown, sin bloques de código, sin texto antes ni después):
 {
   "descripcionCorta": "máximo 140 caracteres, atractiva para turistas",
