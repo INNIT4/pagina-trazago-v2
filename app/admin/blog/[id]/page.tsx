@@ -7,6 +7,7 @@ import {
   doc, getDoc, setDoc, addDoc, collection, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useCategories } from "@/lib/useCategories";
 
 interface FormData {
   title: string;
@@ -34,6 +35,8 @@ export default function BlogEditorPage() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const { options: catOptions, loading: catsLoading } = useCategories("blog_categories");
 
   useEffect(() => {
     if (isNew) return;
@@ -143,8 +146,24 @@ export default function BlogEditorPage() {
               </select>
             </div>
             <div className="admin-field" style={{ marginBottom: 16 }}>
-              <label>Categoría</label>
-              <input value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Crónica, Guía, Historia..." />
+              <label>
+                Categoría{" "}
+                <Link href="/admin/blog/categorias" style={{ fontSize: 12, color: "var(--accent)", textDecoration: "none" }}>
+                  (gestionar)
+                </Link>
+              </label>
+              {catsLoading ? (
+                <input disabled value="Cargando categorías..." />
+              ) : catOptions.length > 0 ? (
+                <select value={form.category} onChange={(e) => set("category", e.target.value)}>
+                  <option value="">— Selecciona —</option>
+                  {catOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Crónica, Guía, Historia..." />
+              )}
             </div>
             <div className="admin-field" style={{ marginBottom: 16 }}>
               <label>Autor</label>

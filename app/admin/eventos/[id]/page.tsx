@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { doc, getDoc, setDoc, addDoc, collection, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useCategories } from "@/lib/useCategories";
 
 interface FormData {
   title: string; description: string; category: string; location: string;
@@ -33,6 +34,8 @@ export default function EventoEditorPage() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const { options: catOptions, loading: catsLoading } = useCategories("event_categories");
 
   useEffect(() => {
     if (isNew) return;
@@ -94,7 +97,26 @@ export default function EventoEditorPage() {
           <div className="admin-field"><label>Título *</label><input value={form.title} onChange={(e) => set("title", e.target.value)} /></div>
           <div className="admin-field"><label>Descripción</label><textarea value={form.description} onChange={(e) => set("description", e.target.value)} /></div>
           <div className="admin-form-row">
-            <div className="admin-field"><label>Categoría</label><input value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Festival, Cultural, Religioso..." /></div>
+            <div className="admin-field">
+              <label>
+                Categoría{" "}
+                <Link href="/admin/eventos/categorias" style={{ fontSize: 12, color: "var(--accent)", textDecoration: "none" }}>
+                  (gestionar)
+                </Link>
+              </label>
+              {catsLoading ? (
+                <input disabled value="Cargando categorías..." />
+              ) : catOptions.length > 0 ? (
+                <select value={form.category} onChange={(e) => set("category", e.target.value)}>
+                  <option value="">— Selecciona —</option>
+                  {catOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Festival, Cultural, Religioso..." />
+              )}
+            </div>
             <div className="admin-field"><label>Lugar</label><input value={form.location} onChange={(e) => set("location", e.target.value)} /></div>
           </div>
           <div className="admin-form-row">

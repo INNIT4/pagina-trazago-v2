@@ -47,7 +47,10 @@ export default function BlogListPage() {
     <>
       <div className="admin-topbar">
         <h1 className="admin-title">Blog</h1>
-        <Link href="/admin/blog/nuevo" className="admin-btn admin-btn-primary">+ Nuevo post</Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/admin/blog/categorias" className="admin-btn admin-btn-ghost">Categorías</Link>
+          <Link href="/admin/blog/nuevo" className="admin-btn admin-btn-primary">+ Nuevo post</Link>
+        </div>
       </div>
 
       <div className="admin-search">

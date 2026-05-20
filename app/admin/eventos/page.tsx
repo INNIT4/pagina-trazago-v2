@@ -40,7 +40,10 @@ export default function EventosPage() {
     <>
       <div className="admin-topbar">
         <h1 className="admin-title">Eventos</h1>
-        <Link href="/admin/eventos/nuevo" className="admin-btn admin-btn-primary">+ Nuevo evento</Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/admin/eventos/categorias" className="admin-btn admin-btn-ghost">Categorías</Link>
+          <Link href="/admin/eventos/nuevo" className="admin-btn admin-btn-primary">+ Nuevo evento</Link>
+        </div>
       </div>
       {loading ? <p style={{ color: "var(--fg-3)", fontSize: 14 }}>Cargando...</p> : (
         <div className="admin-table-wrap">

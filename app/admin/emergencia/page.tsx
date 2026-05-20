@@ -28,17 +28,21 @@ export default function EmergenciaPage() {
     <>
       <div className="admin-topbar">
         <h1 className="admin-title">Contactos de Emergencia</h1>
-        <Link href="/admin/emergencia/nuevo" className="admin-btn admin-btn-primary">+ Nuevo contacto</Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/admin/emergencia/categorias" className="admin-btn admin-btn-ghost">Categorías</Link>
+          <Link href="/admin/emergencia/nuevo" className="admin-btn admin-btn-primary">+ Nuevo contacto</Link>
+        </div>
       </div>
       {loading ? <p style={{ color: "var(--fg-3)", fontSize: 14 }}>Cargando...</p> : (
         <div className="admin-table-wrap">
           <table className="admin-table">
-            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Descripción</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Categoría</th><th>Descripción</th><th>Acciones</th></tr></thead>
             <tbody>
               {items.map((c) => (
                 <tr key={c.id}>
                   <td style={{ fontWeight: 500 }}>{c.name}</td>
                   <td style={{ fontFamily: "var(--mono)", fontSize: 15 }}><strong>{c.phoneNumber}</strong></td>
+                  <td><span className="badge badge-blue">{c.category || "—"}</span></td>
                   <td style={{ color: "var(--fg-2)", fontSize: 13 }}>{c.description}</td>
                   <td style={{ display: "flex", gap: 6 }}>
                     <Link href={`/admin/emergencia/${c.id}`} className="admin-btn admin-btn-sm admin-btn-ghost">Editar</Link>
