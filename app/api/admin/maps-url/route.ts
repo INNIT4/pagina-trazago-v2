@@ -11,12 +11,10 @@ function parseMapsUrl(url: string) {
   try {
     const u = new URL(url);
 
-    // Place ID desde el segmento de datos: !1sChIJxxxx
-    // Los CIDs tienen formato "0x...:0x..." — no son válidos para Places API (New)
+    // Solo extraer Place IDs reales (formato ChIJ...) — ignorar CIDs y textos de búsqueda
     const haystack = u.pathname + (u.search ?? "");
-    const pidMatch = haystack.match(/!1s([^!&/]+)/);
-    const rawId = pidMatch?.[1] ?? null;
-    const placeId = rawId && !rawId.startsWith("0x") && !rawId.includes(":") ? rawId : null;
+    const pidMatch = haystack.match(/!1s(ChIJ[^!&/]+)/);
+    const placeId = pidMatch?.[1] ?? null;
 
     // Coordenadas desde @lat,lng
     const coordMatch = u.pathname.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
