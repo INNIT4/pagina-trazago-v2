@@ -5,9 +5,20 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { doc, getDoc, setDoc, addDoc, collection } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useCategories } from "@/lib/useCategories";
 
 interface FormData { name: string; phoneNumber: string; description: string; category: string; iconEmoji: string; priority: string; }
-const empty: FormData = { name: "", phoneNumber: "", description: "", category: "TOURISM", iconEmoji: "📞", priority: "100" };
+const empty: FormData = { name: "", phoneNumber: "", description: "", category: "", iconEmoji: "📞", priority: "100" };
+
+const DEFAULT_CATS = [
+  { value: "TOURISM", label: "Turismo" },
+  { value: "LODGING", label: "Hospedaje" },
+  { value: "FOOD", label: "Comida" },
+  { value: "TRANSPORT", label: "Transporte" },
+  { value: "HEALTH", label: "Salud" },
+  { value: "UTILITIES", label: "Servicios" },
+  { value: "OTHER", label: "Otro" },
+];
 
 export default function ServicioEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,12 +29,15 @@ export default function ServicioEditorPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const { options: catOptions, loading: catsLoading } = useCategories("service_categories", "key", "label");
+  const cats = catOptions.length > 0 ? catOptions : DEFAULT_CATS;
+
   useEffect(() => {
     if (isNew) return;
     getDoc(doc(db, "services", id)).then((snap) => {
       if (snap.exists()) {
         const d = snap.data();
-        setForm({ name: d.name ?? "", phoneNumber: d.phoneNumber ?? "", description: d.description ?? "", category: d.category ?? "TOURISM", iconEmoji: d.iconEmoji ?? "📞", priority: String(d.priority ?? 100) });
+        setForm({ name: d.name ?? "", phoneNumber: d.phoneNumber ?? "", description: d.description ?? "", category: d.category ?? "", iconEmoji: d.iconEmoji ?? "📞", priority: String(d.priority ?? 100) });
       }
       setLoading(false);
     });
@@ -34,7 +48,7 @@ export default function ServicioEditorPage() {
   async function handleSave() {
     if (!form.name.trim()) { setError("El nombre es obligatorio."); return; }
     setSaving(true); setError("");
-    const data = { name: form.name, phoneNumber: form.phoneNumber, description: form.description, category: form.category, iconEmoji: form.iconEmoji, priority: parseInt(form.priority) || 100 };
+    const data = { name: form.name, phoneNumber: form.phoneNumber, description: form.description, category: form.category, iconEmoji: form.iconEmoji, priority: parseInt(form.priority) || 100, active: true };
     try {
       if (isNew) await addDoc(collection(db, "services"), data);
       else await setDoc(doc(db, "services", id), data, { merge: true });
@@ -64,10 +78,17 @@ export default function ServicioEditorPage() {
           </div>
           <div className="admin-field"><label>Nombre *</label><input value={form.name} onChange={(e) => set("name", e.target.value)} /></div>
           <div className="admin-field"><label>Teléfono</label><input value={form.phoneNumber} onChange={(e) => set("phoneNumber", e.target.value)} /></div>
-          <div className="admin-field"><label>Categoría</label>
-            <select value={form.category} onChange={(e) => set("category", e.target.value)}>
-              {["TOURISM","LODGING","FOOD","TRANSPORT","HEALTH","UTILITIES","OTHER"].map((c) => (
-                <option key={c} value={c}>{c}</option>
+          <div className="admin-field">
+            <label>
+              Categoría{" "}
+              <Link href="/admin/servicios/categorias" style={{ fontSize: 12, color: "var(--accent)", textDecoration: "none" }}>
+                (gestionar)
+              </Link>
+            </label>
+            <select value={form.category} onChange={(e) => set("category", e.target.value)} disabled={catsLoading}>
+              <option value="">— Selecciona —</option>
+              {cats.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           </div>
