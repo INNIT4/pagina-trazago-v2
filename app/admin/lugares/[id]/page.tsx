@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { doc, getDoc, setDoc, addDoc, collection, GeoPoint } from "firebase/firestore";
@@ -99,12 +99,10 @@ export default function LugarEditorPage() {
   const [activeTab, setActiveTab] = useState("general");
   const [aiFilling, setAiFilling] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
-  const [placesSuggestions, setPlacesSuggestions] = useState<Array<{ placeId: string; mainText: string; secondaryText: string }>>([]);
-  const [placesLoading, setPlacesLoading] = useState(false);
-  const [placesMessage, setPlacesMessage] = useState("");
+  const [mapsUrl, setMapsUrl] = useState("");
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlMessage, setUrlMessage] = useState("");
   const [editorialSummary, setEditorialSummary] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (isNew) return;
@@ -162,53 +160,21 @@ export default function LugarEditorPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  function handleNombreChange(value: string) {
-    set("nombre", value);
-    setPlacesMessage("");
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (value.trim().length < 3) {
-      setPlacesSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-
-    debounceRef.current = setTimeout(async () => {
-      setPlacesLoading(true);
-      try {
-        const res = await fetch("/api/admin/places-search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: value }),
-        });
-        const data = await res.json();
-        if (Array.isArray(data.predictions)) {
-          setPlacesSuggestions(data.predictions);
-          setShowSuggestions(true);
-        }
-      } catch {
-        // Silencioso — si Places falla, el usuario puede llenar a mano
-      } finally {
-        setPlacesLoading(false);
-      }
-    }, 350);
-  }
-
-  async function handleSelectPlace(placeId: string) {
-    setShowSuggestions(false);
-    setPlacesLoading(true);
+  async function handleImportFromUrl() {
+    if (!mapsUrl.trim()) return;
+    setUrlLoading(true);
+    setUrlMessage("");
     setError("");
     try {
-      const res = await fetch("/api/admin/places-details", {
+      const res = await fetch("/api/admin/maps-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ placeId }),
+        body: JSON.stringify({ url: mapsUrl.trim() }),
       });
       const d = await res.json();
-      if (!res.ok) { setError(d.error ?? "Error al cargar detalles"); return; }
+      if (!res.ok) { setError(d.error ?? "No se pudo importar"); return; }
 
       setEditorialSummary(d._editorialSummary ?? "");
-
       setForm((prev) => ({
         ...prev,
         nombre: d.nombre || prev.nombre,
@@ -222,14 +188,14 @@ export default function LugarEditorPage() {
         ubicacion: d.ubicacion ?? prev.ubicacion,
         imagenUrl: d.imagenUrl || prev.imagenUrl,
         imagenesGaleria: Array.isArray(d.imagenesGaleria) && d.imagenesGaleria.length > 0
-          ? d.imagenesGaleria
-          : prev.imagenesGaleria,
+          ? d.imagenesGaleria : prev.imagenesGaleria,
       }));
-      setPlacesMessage("✓ Datos importados de Google Places. Ahora completa categorización y dale a ✨ Rellenar con IA para descripciones.");
+      setUrlMessage(`✓ Importado: ${d.nombre}. Elige la categoría y usa ✨ Rellenar con IA.`);
+      setMapsUrl("");
     } catch {
-      setError("No se pudo conectar con Google Places.");
+      setError("Error de conexión al importar.");
     } finally {
-      setPlacesLoading(false);
+      setUrlLoading(false);
     }
   }
 
@@ -340,6 +306,33 @@ export default function LugarEditorPage() {
 
       {error && <div className="admin-error">{error}</div>}
 
+      {/* Importar desde Google Maps */}
+      <div className="admin-card" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>📎 Importar desde Google Maps</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            style={{ flex: "1 1 280px", minWidth: 0 }}
+            placeholder="Pega aquí el link de Google Maps (maps.google.com o maps.app.goo.gl)"
+            value={mapsUrl}
+            onChange={(e) => setMapsUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleImportFromUrl()}
+          />
+          <button
+            className="admin-btn admin-btn-primary"
+            onClick={handleImportFromUrl}
+            disabled={urlLoading || !mapsUrl.trim()}
+            style={{ whiteSpace: "nowrap" }}
+          >
+            {urlLoading ? "Importando…" : "Importar"}
+          </button>
+        </div>
+        {urlMessage && (
+          <div style={{ marginTop: 8, padding: "8px 12px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, fontSize: 13, color: "#166534" }}>
+            {urlMessage}
+          </div>
+        )}
+      </div>
+
       <div className="admin-tabs" style={{ width: "100%" }}>
         {tabs.map((t) => (
           <button key={t} className={`admin-tab ${activeTab === t ? "active" : ""}`} onClick={() => setActiveTab(t)}>
@@ -352,58 +345,23 @@ export default function LugarEditorPage() {
         <div className="admin-form-section">
           <div className="admin-form-section-title">Información general</div>
           <div className="admin-form">
-            <div className="admin-field" style={{ position: "relative" }}>
-              <label>Nombre * <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: "var(--fg-3)" }}>— escribe para buscar en Google Places</span></label>
-              <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 240px", position: "relative", minWidth: 200 }}>
-                  <input
-                    style={{ width: "100%" }}
-                    value={form.nombre}
-                    onChange={(e) => handleNombreChange(e.target.value)}
-                    onFocus={() => placesSuggestions.length > 0 && setShowSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                    placeholder="Ej: Catedral de La Purísima Concepción"
-                    autoComplete="off"
-                  />
-                  {placesLoading && (
-                    <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "var(--fg-3)" }}>
-                      Buscando…
-                    </span>
-                  )}
-                  {showSuggestions && placesSuggestions.length > 0 && (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "#fff", border: "1px solid #dde1e7", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,.08)", zIndex: 50, maxHeight: 300, overflowY: "auto" }}>
-                      {placesSuggestions.map((s) => (
-                        <button
-                          key={s.placeId}
-                          type="button"
-                          onMouseDown={(e) => { e.preventDefault(); handleSelectPlace(s.placeId); }}
-                          style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 14px", border: "none", borderBottom: "1px solid #f0f2f5", background: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "#f8f9fa")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
-                        >
-                          <div style={{ fontWeight: 600, color: "var(--navy)" }}>{s.mainText}</div>
-                          {s.secondaryText && <div style={{ fontSize: 12, color: "var(--fg-3)", marginTop: 2 }}>{s.secondaryText}</div>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            <div className="admin-field">
+              <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Nombre *</span>
                 <button
                   type="button"
-                  className="admin-btn admin-btn-primary"
+                  className="admin-btn admin-btn-primary admin-btn-sm"
                   onClick={handleAiFill}
                   disabled={aiFilling || !form.nombre.trim()}
-                  title="Genera descripciones, historia, tips y tags automáticamente con IA"
-                  style={{ whiteSpace: "nowrap", flexShrink: 0 }}
                 >
                   {aiFilling ? "Generando…" : "✨ Rellenar con IA"}
                 </button>
-              </div>
-              {placesMessage && (
-                <div style={{ marginTop: 8, padding: "8px 12px", background: "#eff6ff", border: "1px solid #93c5fd", borderRadius: 8, fontSize: 13, color: "#1e40af" }}>
-                  {placesMessage}
-                </div>
-              )}
+              </label>
+              <input
+                value={form.nombre}
+                onChange={(e) => set("nombre", e.target.value)}
+                placeholder="Ej: Catedral de La Purísima Concepción"
+              />
               {aiMessage && (
                 <div style={{ marginTop: 8, padding: "8px 12px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, fontSize: 13, color: "#166534" }}>
                   {aiMessage}
