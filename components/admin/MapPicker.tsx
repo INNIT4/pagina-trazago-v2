@@ -45,7 +45,7 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
       return;
     }
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker&loading=async&v=quarterly`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=quarterly`;
     script.async = true;
     script.defer = true;
     script.dataset.googleMaps = "true";
