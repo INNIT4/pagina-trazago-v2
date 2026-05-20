@@ -17,7 +17,7 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 1500,
+            maxOutputTokens: 1800,
             responseMimeType: "application/json",
           },
         }),
@@ -26,7 +26,6 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
 
     const json = await res.json();
 
-    // Si Gemini devolvió un error, intentar con el siguiente modelo
     if (json.error) {
       console.warn(`Model ${model} error:`, json.error.message);
       continue;
@@ -77,12 +76,17 @@ Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta (sin mark
   "tags": ["tag1", "tag2", "tag3", "tag4"],
   "mejorMomentoDelDia": ["MAÑANA", "TARDE"],
   "mejorTemporada": ["Todo el año"],
-  "audienciaIdeal": ["FAMILIA", "PAREJA"]
+  "audienciaIdeal": ["FAMILIA", "PAREJA"],
+  "tipoActividad": "EXTERIOR"
 }
 
 Valores permitidos para mejorMomentoDelDia: AMANECER, MAÑANA, MEDIODIA, TARDE, ATARDECER, NOCHE
 Valores permitidos para mejorTemporada: Primavera, Verano, Otoño, Invierno, Todo el año
-Valores permitidos para audienciaIdeal: SOLO, PAREJA, FAMILIA, AMIGOS, NIÑOS, MAYORES`;
+Valores permitidos para audienciaIdeal: SOLO, PAREJA, FAMILIA, AMIGOS, NIÑOS, MAYORES
+Valores permitidos para tipoActividad:
+  - INTERIOR: espacios cerrados (museos, restaurantes, hoteles, tiendas, bares, spas)
+  - EXTERIOR: al aire libre (plazas, parques, sitios arqueológicos, miradores, mercados al aire libre)
+  - MIXTO: combinación de ambos (iglesias con atrio, haciendas, mercados cubiertos con área exterior)`;
 
   try {
     const text = await callGemini(apiKey, prompt);
@@ -91,8 +95,6 @@ Valores permitidos para audienciaIdeal: SOLO, PAREJA, FAMILIA, AMIGOS, NIÑOS, M
       return NextResponse.json({ error: "Gemini no devolvió respuesta. Verifica que la API key tenga acceso a la Gemini API." }, { status: 500 });
     }
 
-    // Con responseMimeType: "application/json" el texto ya es JSON puro.
-    // Fallback: extraer con regex por si acaso.
     let data: unknown;
     try {
       data = JSON.parse(text);

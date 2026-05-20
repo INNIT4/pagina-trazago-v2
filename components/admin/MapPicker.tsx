@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 
-// Centro de Álamos, Sonora (fallback inicial)
 const ALAMOS_LAT = 27.0277;
 const ALAMOS_LNG = -108.9389;
 
@@ -13,28 +12,36 @@ declare global {
     google?: {
       maps?: {
         Map: new (el: HTMLElement, opts: Record<string, unknown>) => GMap;
-        Marker: new (opts: Record<string, unknown>) => GMarker;
-        event: { addListener: (target: object, event: string, cb: (e: { latLng?: { lat(): number; lng(): number } }) => void) => void };
+        event: {
+          addListener: (
+            target: object,
+            event: string,
+            cb: (e: { latLng?: { lat(): number; lng(): number } }) => void
+          ) => void;
+        };
+        marker?: {
+          AdvancedMarkerElement: new (opts: Record<string, unknown>) => GAdvancedMarker;
+        };
       };
     };
-    __initMapPicker?: () => void;
   }
 }
 
 type GMap = {
-  setCenter: (pos: LatLng) => void;
   panTo: (pos: LatLng) => void;
 };
-type GMarker = {
-  setPosition: (pos: LatLng) => void;
-  getPosition: () => { lat(): number; lng(): number };
+
+type GAdvancedMarker = {
+  position: LatLng | { lat: number; lng: number } | null;
+  map: GMap | null;
+  addListener: (event: string, cb: () => void) => void;
 };
 
 let scriptLoading: Promise<void> | null = null;
 
 function loadGoogleMaps(apiKey: string): Promise<void> {
   if (typeof window === "undefined") return Promise.reject(new Error("SSR"));
-  if (window.google?.maps?.Map) return Promise.resolve();
+  if (window.google?.maps?.Map && window.google?.maps?.marker) return Promise.resolve();
   if (scriptLoading) return scriptLoading;
 
   scriptLoading = new Promise((resolve, reject) => {
@@ -45,9 +52,8 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
       return;
     }
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=quarterly`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&loading=async&v=weekly&libraries=marker`;
     script.async = true;
-    script.defer = true;
     script.dataset.googleMaps = "true";
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("Maps script failed"));
@@ -65,8 +71,9 @@ export default function MapPicker({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GMap | null>(null);
-  const markerRef = useRef<GMarker | null>(null);
+  const markerRef = useRef<GAdvancedMarker | null>(null);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+  const mapId = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID ?? "DEMO_MAP_ID";
 
   useEffect(() => {
     if (!apiKey || !containerRef.current) return;
@@ -82,13 +89,14 @@ export default function MapPicker({
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
+        mapId,
       });
       mapRef.current = map;
 
-      const marker = new window.google.maps.Marker({
+      const marker = new window.google.maps.marker!.AdvancedMarkerElement({
         position: center,
         map,
-        draggable: true,
+        gmpDraggable: true,
       });
       markerRef.current = marker;
 
@@ -96,14 +104,22 @@ export default function MapPicker({
       window.google.maps.event.addListener(map, "click", (e) => {
         if (!e.latLng) return;
         const pos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-        marker.setPosition(pos);
+        marker.position = pos;
         onChange(pos);
       });
 
       // Arrastrar el pin → actualiza coords
-      window.google.maps.event.addListener(marker, "dragend", () => {
-        const p = marker.getPosition();
-        onChange({ lat: p.lat(), lng: p.lng() });
+      marker.addListener("dragend", () => {
+        const p = marker.position;
+        if (!p) return;
+        // AdvancedMarkerElement.position puede ser LatLngLiteral o LatLng (con .lat como función)
+        const lat = typeof (p as { lat: unknown }).lat === "function"
+          ? (p as { lat: () => number }).lat()
+          : (p as { lat: number }).lat;
+        const lng = typeof (p as { lng: unknown }).lng === "function"
+          ? (p as { lng: () => number }).lng()
+          : (p as { lng: number }).lng;
+        onChange({ lat, lng });
       });
     }).catch((err) => {
       console.error("Maps load error:", err);
@@ -111,12 +127,12 @@ export default function MapPicker({
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey]);
+  }, [apiKey, mapId]);
 
-  // Cuando cambia el valor externo (por ej. Google Places autofill) → mover pin
+  // Cuando cambia el valor externo (ej. import desde Google Maps) → mover pin
   useEffect(() => {
     if (!value || !mapRef.current || !markerRef.current) return;
-    markerRef.current.setPosition(value);
+    markerRef.current.position = value;
     mapRef.current.panTo(value);
   }, [value]);
 
